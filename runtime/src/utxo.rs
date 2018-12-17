@@ -1,11 +1,8 @@
-use primitives::H256;
+use parity_codec::Encode;
+use primitives::{Signature, H256};
 use rstd::collections::btree_map::BTreeMap;
 use runtime_io::ed25519_verify;
-use runtime_primitives::traits::{BlakeTwo256, Hash};
-use srml_support::{
-	dispatch::{Result, Vec},
-	StorageMap,
-};
+use srml_support::dispatch::{Result, Vec};
 use system::ensure_inherent;
 
 pub trait Trait: system::Trait {}
@@ -16,17 +13,11 @@ decl_module! {
 			ensure_inherent(origin)?;
 
 			// In order to execute the transaction we need to ensure that:
-			// - all inputs match to unspent outputs
+			// - all inputs match to existing and unspent outputs
 			// - each unspent output is used exactly once
 			// - each output is defined exactly once
 			// - sum of output value is less than sum of input value
 			// - provided signatures must be valid
-
-			let inputs_valid = transaction.inputs
-				.iter()
-				.map(|input| BlakeTwo256::hash_of(input))
-				.all(|hash| <UnspentOutputs<T>>::exists(&hash));
-			ensure!(inputs_valid, "all inputs must exist and be unspent");
 
 			{
 				let input_set: BTreeMap<_, ()> = transaction.inputs
@@ -46,10 +37,16 @@ decl_module! {
 
 			let input_value: u128 = transaction.inputs
 				.iter()
-				.map(|input| <UnspentOutputs<T>>::get(&input.linked_output).value)
-				.fold(Ok(0u128), |sum, value| {
+				.map(|input| (input.signature, Self::utxo(&input.linked_output)))
+				.fold(Ok(0u128), |sum, (signature, output)| {
+					ensure!(output.is_some(), "all linked outputs must exist and be unspent");
+					let output = output.unwrap();
+
+					let digest = output.encode();
+					ensure!(ed25519_verify(signature.as_fixed_bytes(), &digest, &output.pubkey), "signature must be valid");
+
 					sum.and_then(|s|
-						match s.checked_add(value) {
+						match s.checked_add(output.value) {
 							Some(sum) => Ok(sum),
 							None => Err("input value overflow"),
 						}
@@ -77,7 +74,7 @@ decl_module! {
 
 decl_storage! {
 	trait Store for Module<T: Trait> as Demo {
-		UnspentOutputs: map H256 => TransactionOutput;
+		UnspentOutputs get(utxo): map H256 => Option<TransactionOutput>;
 	}
 }
 
@@ -92,16 +89,12 @@ pub struct Transaction {
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 pub struct TransactionInput {
 	pub linked_output: H256,
-	pub signature: Bytes,
+	pub signature: Signature,
 }
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, Hash)]
 pub struct TransactionOutput {
 	pub value: u128,
-	pub pubkey: Bytes,
+	pub pubkey: H256,
 }
-
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
-#[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, Hash)]
-pub struct Bytes(Vec<u8>);
