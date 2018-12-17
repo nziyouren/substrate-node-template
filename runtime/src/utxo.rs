@@ -78,26 +78,28 @@ impl<T: Trait> Module<T> {
 		}
 
 		let total_input: u128 = transaction.inputs.iter().fold(Ok(0u128), |sum, input| {
-			// Fetch UTXO from the storage
-			let output = match Self::utxo(&input.linked_output) {
-				Some(output) => output,
-				None => return Err("all linked outputs must exist and be unspent"),
-			};
+			sum.and_then(|sum| {
+				// Fetch UTXO from the storage
+				let output = match Self::utxo(&input.linked_output) {
+					Some(output) => output,
+					None => return Err("all linked outputs must exist and be unspent"),
+				};
 
-			// Check that we're authorized to use it
-			ensure!(
-				ed25519_verify(
-					input.signature.as_fixed_bytes(),
-					input.linked_output.as_fixed_bytes(),
-					&output.pubkey
-				),
-				"signature must be valid"
-			);
+				// Check that we're authorized to use it
+				ensure!(
+					ed25519_verify(
+						input.signature.as_fixed_bytes(),
+						input.linked_output.as_fixed_bytes(),
+						&output.pubkey
+					),
+					"signature must be valid"
+				);
 
-			// Add the value to the incoming sum
-			sum.and_then(|s| match s.checked_add(output.value) {
-				Some(sum) => Ok(sum),
-				None => Err("input value overflow"),
+				// Add the value to the incoming sum
+				match sum.checked_add(output.value) {
+					Some(sum) => Ok(sum),
+					None => Err("input value overflow"),
+				}
 			})
 		})?;
 
