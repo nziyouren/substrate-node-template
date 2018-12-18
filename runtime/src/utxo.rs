@@ -37,7 +37,7 @@ decl_module! {
 			ensure_inherent(origin)?;
 
 			Self::check_transaction(&transaction)?;
-			Self::update_storage(transaction)?;
+			Self::update_storage(transaction);
 
 			Ok(())
 		}
@@ -51,30 +51,40 @@ decl_storage! {
 }
 
 impl<T: Trait> Module<T> {
+	/// Check transaction for validity.
+	///
+	/// Ensures that:
+	/// - all inputs match to existing and unspent outputs
+	/// - each unspent output is used exactly once
+	/// - each output is defined exactly once
+	/// - total output value must not exceed total input value
+	/// - new outputs do not collide with existing ones
+	/// - provided signatures are valid
 	fn check_transaction(transaction: &Transaction) -> Result {
-		// We need to ensure that:
-		// - all inputs match to existing and unspent outputs
-		// - each unspent output is used exactly once
-		// - each output is defined exactly once
-		// - total output value must not exceed total input value
-		// - provided signatures are valid
-
 		{
-			let input_set: BTreeMap<_, ()> = transaction.inputs
+			let input_set: BTreeMap<_, ()> = transaction
+				.inputs
 				.iter()
 				.map(|input| (input, ()))
 				.collect();
 
-			ensure!(input_set.len() == transaction.inputs.len(), "each input must be used only once");
+			ensure!(
+				input_set.len() == transaction.inputs.len(),
+				"each input must be used only once"
+			);
 		}
 
 		{
-			let output_set: BTreeMap<_, ()> = transaction.outputs
+			let output_set: BTreeMap<_, ()> = transaction
+				.outputs
 				.iter()
 				.map(|output| (output, ()))
 				.collect();
 
-			ensure!(output_set.len() == transaction.outputs.len(), "each output must be defined only once");
+			ensure!(
+				output_set.len() == transaction.outputs.len(),
+				"each output must be defined only once"
+			);
 		}
 
 		let total_input = transaction.inputs.iter().fold(Ok(0u128), |sum, input| {
@@ -103,36 +113,37 @@ impl<T: Trait> Module<T> {
 			})
 		})?;
 
-		let total_output = transaction.outputs.iter().map(|output| output.value).fold(
-			Ok(0u128),
-			|sum, value| {
-				sum.and_then(|sum| match sum.checked_add(value) {
+		let total_output = transaction.outputs.iter().fold(Ok(0u128), |sum, output| {
+			sum.and_then(|sum| {
+				let hash = BlakeTwo256::hash_of(output);
+				ensure!(!<UnspentOutputs<T>>::exists(hash), "UTXO already exists");
+
+				match sum.checked_add(output.value) {
 					Some(sum) => Ok(sum),
 					None => Err("output value overflow"),
-				})
-			},
-		)?;
+				}
+			})
+		})?;
 
-		ensure!(total_input >= total_output, "output value must not exceed input value");
+		ensure!(
+			total_input >= total_output,
+			"output value must not exceed input value"
+		);
 
 		Ok(())
 	}
 
-	fn update_storage(transaction: Transaction) -> Result {
-		// In order to spend transaction we need to:
-		// - remove used UTXO's
-		// - add new UTXO's created by this transaction
-
+	/// Update storage to reflect changes made by transaction
+	fn update_storage(transaction: Transaction) {
+		// Remove all used UTXO to mark them as spent
 		for input in transaction.inputs {
 			<UnspentOutputs<T>>::remove(input.parent_output);
 		}
 
+		// Add new UTXO to be used by future transactions
 		for output in transaction.outputs {
 			let hash = BlakeTwo256::hash_of(&output);
-			ensure!(!<UnspentOutputs<T>>::exists(hash), "UTXO already exists"); // FIXME
 			<UnspentOutputs<T>>::insert(hash, output);
 		}
-
-		Ok(())
 	}
 }
