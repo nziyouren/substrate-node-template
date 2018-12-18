@@ -35,12 +35,6 @@ pub struct TransactionOutput {
 
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
-		fn deposit_event(event: Event) {
-			<system::Module<T>>::deposit_event(
-				<T as Trait>::Event::from(event).into()
-			);
-		}
-
 		pub fn execute(origin, transaction: Transaction) -> Result {
 			ensure_inherent(origin)?;
 
@@ -59,6 +53,12 @@ decl_storage! {
 		UnspentOutputs get(utxo): map H256 => Option<TransactionOutput>;
 	}
 }
+
+decl_event!(
+	pub enum Event {
+		TransactionExecuted(Transaction),
+	}
+);
 
 impl<T: Trait> Module<T> {
 	/// Check transaction for validity.
@@ -156,10 +156,9 @@ impl<T: Trait> Module<T> {
 			<UnspentOutputs<T>>::insert(hash, output);
 		}
 	}
-}
 
-decl_event!(
-	pub enum Event {
-		TransactionExecuted(Transaction),
+	fn deposit_event(event: Event) {
+		let event = <T as Trait>::Event::from(event).into();
+		<system::Module<T>>::deposit_event(event);
 	}
-);
+}
