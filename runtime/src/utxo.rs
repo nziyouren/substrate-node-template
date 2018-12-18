@@ -64,6 +64,7 @@ impl<T: Trait> Module<T> {
 	/// Check transaction for validity.
 	///
 	/// Ensures that:
+	/// - inputs and outputs are not empty
 	/// - all inputs match to existing and unspent outputs
 	/// - each unspent output is used exactly once
 	/// - each output is defined exactly once
@@ -71,6 +72,9 @@ impl<T: Trait> Module<T> {
 	/// - new outputs do not collide with existing ones
 	/// - provided signatures are valid
 	fn check_transaction(transaction: &Transaction) -> Result {
+		ensure!(!transaction.inputs.is_empty(), "no inputs");
+		ensure!(!transaction.outputs.is_empty(), "no outputs");
+
 		{
 			let input_set: BTreeMap<_, ()> = transaction
 				.inputs
@@ -160,5 +164,113 @@ impl<T: Trait> Module<T> {
 	fn deposit_event(event: Event) {
 		let event = <T as Trait>::Event::from(event).into();
 		<system::Module<T>>::deposit_event(event);
+	}
+
+	#[cfg(test)]
+	fn insert_utxo(output: TransactionOutput) -> H256 {
+		let hash = BlakeTwo256::hash_of(&output);
+		<UnspentOutputs<T>>::insert(hash, output);
+		hash
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use primitives::blake2_256;
+	use primitives::ed25519::Pair;
+	use primitives::Blake2Hasher;
+	use runtime_io::with_externalities;
+
+	use runtime_primitives::{
+		testing::{Digest, DigestItem, Header},
+		traits::BlakeTwo256,
+		BuildStorage,
+	};
+
+	impl_outer_origin! {
+		pub enum Origin for Test {}
+	}
+
+	#[derive(Clone, Eq, PartialEq)]
+	pub struct Test;
+
+	impl system::Trait for Test {
+		type Origin = Origin;
+		type Index = u64;
+		type BlockNumber = u64;
+		type Hash = H256;
+		type Hashing = BlakeTwo256;
+		type Digest = Digest;
+		type AccountId = u64;
+		type Header = Header;
+		type Event = ();
+		type Log = DigestItem;
+	}
+
+	impl Trait for Test {
+		type Event = Event;
+	}
+
+	type Utxo = Module<Test>;
+
+	fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
+		system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
+	}
+
+	#[test]
+	fn empty() {
+		with_externalities(&mut new_test_ext(), || {
+			assert_err!(
+				Utxo::execute(Origin::INHERENT, Transaction::default()),
+				"no inputs"
+			);
+
+			assert_err!(
+				Utxo::execute(
+					Origin::INHERENT,
+					Transaction {
+						inputs: vec![TransactionInput::default()],
+						outputs: vec![],
+					}
+				),
+				"no outputs"
+			);
+		});
+	}
+
+	#[test]
+	fn valid_transaction() {
+		with_externalities(&mut new_test_ext(), || {
+			let keypair = Pair::from_seed(&blake2_256(b"test"));
+
+			let parent_hash = Utxo::insert_utxo(
+				TransactionOutput {
+					value: 100,
+					pubkey: keypair.public().0.into(),
+				}
+			);
+
+			let transaction = Transaction {
+				inputs: vec![
+					TransactionInput {
+						parent_output: parent_hash,
+						signature: keypair.sign(parent_hash.as_fixed_bytes()),
+					}
+				],
+				outputs: vec![
+					TransactionOutput {
+						value: 100,
+						pubkey: 0.into(),
+					}
+				],
+			};
+
+			let output_hash = BlakeTwo256::hash_of(&transaction.outputs[0]);
+
+			assert_ok!(Utxo::execute(Origin::INHERENT, transaction));
+			assert!(!<UnspentOutputs<Test>>::exists(parent_hash));
+			assert!(<UnspentOutputs<Test>>::exists(output_hash));
+		});
 	}
 }
