@@ -8,7 +8,9 @@ use srml_support::{
 };
 use system::ensure_inherent;
 
-pub trait Trait: system::Trait {}
+pub trait Trait: system::Trait {
+	type Event: From<Event> + Into<<Self as system::Trait>::Event>;
+}
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
@@ -33,11 +35,19 @@ pub struct TransactionOutput {
 
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+		fn deposit_event(event: Event) {
+			<system::Module<T>>::deposit_event(
+				<T as Trait>::Event::from(event).into()
+			);
+		}
+
 		pub fn execute(origin, transaction: Transaction) -> Result {
 			ensure_inherent(origin)?;
 
 			Self::check_transaction(&transaction)?;
-			Self::update_storage(transaction);
+			Self::update_storage(&transaction);
+
+			Self::deposit_event(Event::TransactionExecuted(transaction));
 
 			Ok(())
 		}
@@ -134,16 +144,22 @@ impl<T: Trait> Module<T> {
 	}
 
 	/// Update storage to reflect changes made by transaction
-	fn update_storage(transaction: Transaction) {
+	fn update_storage(transaction: &Transaction) {
 		// Remove all used UTXO to mark them as spent
-		for input in transaction.inputs {
+		for input in &transaction.inputs {
 			<UnspentOutputs<T>>::remove(input.parent_output);
 		}
 
 		// Add new UTXO to be used by future transactions
-		for output in transaction.outputs {
-			let hash = BlakeTwo256::hash_of(&output);
+		for output in &transaction.outputs {
+			let hash = BlakeTwo256::hash_of(output);
 			<UnspentOutputs<T>>::insert(hash, output);
 		}
 	}
 }
+
+decl_event!(
+	pub enum Event {
+		TransactionExecuted(Transaction),
+	}
+);

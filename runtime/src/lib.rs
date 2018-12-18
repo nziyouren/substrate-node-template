@@ -29,9 +29,6 @@ extern crate srml_timestamp as timestamp;
 extern crate srml_balances as balances;
 extern crate srml_upgrade_key as upgrade_key;
 
-mod utxo;
-impl utxo::Trait for Runtime {}
-
 #[cfg(feature = "std")]
 use parity_codec::{Encode, Decode};
 use rstd::prelude::*;
@@ -72,6 +69,8 @@ pub type BlockNumber = u64;
 
 /// Index of an account's extrinsic in the chain.
 pub type Nonce = u64;
+
+mod utxo;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
@@ -180,6 +179,10 @@ impl upgrade_key::Trait for Runtime {
 	type Event = Event;
 }
 
+impl utxo::Trait for Runtime {
+	type Event = Event;
+}
+
 construct_runtime!(
 	pub enum Runtime with Log(InternalLog: DigestItem<Hash, AuthorityId>) where
 		Block = Block,
@@ -190,7 +193,7 @@ construct_runtime!(
 		Consensus: consensus::{Module, Call, Storage, Config<T>, Log(AuthoritiesChange), Inherent},
 		Balances: balances,
 		UpgradeKey: upgrade_key,
-		Utxo: utxo::{Module, Call, Storage},
+		Utxo: utxo::{Module, Call, Storage, Event},
 	}
 );
 
