@@ -49,7 +49,7 @@ decl_module! {
 }
 
 decl_storage! {
-	trait Store for Module<T: Trait> as Demo {
+	trait Store for Module<T: Trait> as Utxo {
 		UnspentOutputs get(utxo): map H256 => Option<TransactionOutput>;
 	}
 }
