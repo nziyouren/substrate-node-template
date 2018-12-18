@@ -20,7 +20,7 @@ pub struct Transaction {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 pub struct TransactionInput {
-	pub linked_output: H256,
+	pub parent_output: H256,
 	pub signature: Signature,
 }
 
@@ -37,7 +37,7 @@ decl_module! {
 			ensure_inherent(origin)?;
 
 			Self::check_transaction(&transaction)?;
-			Self::spend_transaction(transaction)?;
+			Self::update_storage(transaction)?;
 
 			Ok(())
 		}
@@ -56,7 +56,7 @@ impl<T: Trait> Module<T> {
 		// - all inputs match to existing and unspent outputs
 		// - each unspent output is used exactly once
 		// - each output is defined exactly once
-		// - sum of output value is less than sum of input value
+		// - total output value must not exceed total input value
 		// - provided signatures are valid
 
 		{
@@ -77,10 +77,10 @@ impl<T: Trait> Module<T> {
 			ensure!(output_set.len() == transaction.outputs.len(), "each output must be defined only once");
 		}
 
-		let total_input: u128 = transaction.inputs.iter().fold(Ok(0u128), |sum, input| {
+		let total_input = transaction.inputs.iter().fold(Ok(0u128), |sum, input| {
 			sum.and_then(|sum| {
 				// Fetch UTXO from the storage
-				let output = match Self::utxo(&input.linked_output) {
+				let output = match Self::utxo(&input.parent_output) {
 					Some(output) => output,
 					None => return Err("all linked outputs must exist and be unspent"),
 				};
@@ -89,13 +89,13 @@ impl<T: Trait> Module<T> {
 				ensure!(
 					ed25519_verify(
 						input.signature.as_fixed_bytes(),
-						input.linked_output.as_fixed_bytes(),
+						input.parent_output.as_fixed_bytes(),
 						&output.pubkey
 					),
 					"signature must be valid"
 				);
 
-				// Add the value to the incoming sum
+				// Add the value to the input total
 				match sum.checked_add(output.value) {
 					Some(sum) => Ok(sum),
 					None => Err("input value overflow"),
@@ -103,10 +103,10 @@ impl<T: Trait> Module<T> {
 			})
 		})?;
 
-		let total_output: u128 = transaction.outputs.iter().map(|output| output.value).fold(
+		let total_output = transaction.outputs.iter().map(|output| output.value).fold(
 			Ok(0u128),
 			|sum, value| {
-				sum.and_then(|s| match s.checked_add(value) {
+				sum.and_then(|sum| match sum.checked_add(value) {
 					Some(sum) => Ok(sum),
 					None => Err("output value overflow"),
 				})
@@ -118,13 +118,13 @@ impl<T: Trait> Module<T> {
 		Ok(())
 	}
 
-	fn spend_transaction(transaction: Transaction) -> Result {
+	fn update_storage(transaction: Transaction) -> Result {
 		// In order to spend transaction we need to:
 		// - remove used UTXO's
 		// - add new UTXO's created by this transaction
 
 		for input in transaction.inputs {
-			<UnspentOutputs<T>>::remove(input.linked_output);
+			<UnspentOutputs<T>>::remove(input.parent_output);
 		}
 
 		for output in transaction.outputs {
