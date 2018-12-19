@@ -12,25 +12,43 @@ pub trait Trait: system::Trait {
 	type Event: From<Event> + Into<<Self as system::Trait>::Event>;
 }
 
+/// Single transaction to be dispatched
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 pub struct Transaction {
+	/// List of existing UTXOs to be used as inputs for current transaction
 	pub inputs: Vec<TransactionInput>,
+
+	/// List of UTXOs to be created as a result of current transaction dispatch
 	pub outputs: Vec<TransactionOutput>,
 }
 
+/// Single transaction input that refers to one existing UTXO
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 pub struct TransactionInput {
+	/// Reference to an Existing UTXO to be spent
 	pub parent_output: H256,
+
+	/// Proof that transaction owner is authorized to spend referred UTXO
 	pub signature: Signature,
 }
 
+/// Single transaction output to create as a result of a transaction dispatch
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, Hash)]
 pub struct TransactionOutput {
+	/// Value to be assigned to this UTXO
 	pub value: u128,
+
+	/// Public key to be associated with this UTXO. In order to spend this UTXO
+	/// owner must provide a proof by hashing `TransactionOutput` and signing it
+	/// with a corresponding private key.
 	pub pubkey: H256,
+
+	/// Unique (potentially random) value used to distinguish this
+	/// particular UTXO from others addressed to the same public
+	/// key with the same value. Prevents potential replay attacks.
 	pub salt: u32,
 }
 
