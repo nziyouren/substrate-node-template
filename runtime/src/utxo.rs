@@ -31,6 +31,7 @@ pub struct TransactionInput {
 pub struct TransactionOutput {
 	pub value: u128,
 	pub pubkey: H256,
+	pub salt: u32,
 }
 
 decl_module! {
@@ -250,6 +251,7 @@ mod tests {
 				TransactionOutput {
 					value: 100,
 					pubkey: keypair.public().0.into(),
+					salt: 0,
 				}
 			);
 
@@ -264,6 +266,7 @@ mod tests {
 					TransactionOutput {
 						value: 100,
 						pubkey: 0.into(),
+						salt: 0,
 					}
 				],
 			};
