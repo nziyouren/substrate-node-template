@@ -68,7 +68,7 @@ impl<T: Trait> Module<T> {
 	/// - all inputs match to existing and unspent outputs
 	/// - each unspent output is used exactly once
 	/// - each output is defined exactly once
-	/// - total output value must not exceed total input value
+	/// - total output value must be nonzero and not exceed total input value
 	/// - new outputs do not collide with existing ones
 	/// - provided signatures are valid
 	fn check_transaction(transaction: &Transaction) -> Result {
@@ -129,6 +129,8 @@ impl<T: Trait> Module<T> {
 
 		let total_output = transaction.outputs.iter().fold(Ok(0u128), |sum, output| {
 			sum.and_then(|sum| {
+				ensure!(output.value != 0, "output value must be nonzero");
+
 				let hash = BlakeTwo256::hash_of(output);
 				ensure!(!<UnspentOutputs<T>>::exists(hash), "UTXO already exists");
 
