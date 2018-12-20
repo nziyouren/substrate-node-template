@@ -70,7 +70,8 @@ decl_module! {
 decl_storage! {
 	trait Store for Module<T: Trait> as Utxo {
 		/// All valid unspent transaction outputs are stored in this map.
-		UnspentOutputs get(utxo): map H256 => Option<TransactionOutput>;
+		pub UnspentOutputs config(utxo): map H256 => Option<TransactionOutput>;
+		// Foo config(bar): u32; // this doesn't work too
 	}
 }
 
@@ -125,7 +126,7 @@ impl<T: Trait> Module<T> {
 		let total_input = transaction.inputs.iter().fold(Ok(0u128), |sum, input| {
 			sum.and_then(|sum| {
 				// Fetch UTXO from the storage
-				let output = match Self::utxo(&input.parent_output) {
+				let output = match <UnspentOutputs<T>>::get(&input.parent_output) {
 					Some(output) => output,
 					None => return Err("all parent outputs must exist and be unspent"),
 				};

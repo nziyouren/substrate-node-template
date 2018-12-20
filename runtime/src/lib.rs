@@ -98,8 +98,8 @@ pub mod opaque {
 
 /// This runtime version.
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("template-node"),
-	impl_name: create_runtime_str!("template-node"),
+	spec_name: create_runtime_str!("utxo-node"),
+	impl_name: create_runtime_str!("utxo-node"),
 	authoring_version: 1,
 	spec_version: 1,
 	impl_version: 0,
@@ -197,7 +197,7 @@ construct_runtime!(
 		Aura: aura::{Module},
 		Balances: balances,
 		UpgradeKey: upgrade_key,
-		Utxo: utxo::{Module, Call, Storage, Event},
+		Utxo: utxo::{Module, Call, Storage, Config<T>, Event},
 	}
 );
 

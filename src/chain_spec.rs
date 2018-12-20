@@ -1,6 +1,6 @@
 use primitives::{AuthorityId, ed25519};
 use template_node_runtime::{
-	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, BalancesConfig, UpgradeKeyConfig,
+	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, BalancesConfig, UpgradeKeyConfig, UtxoConfig
 };
 use substrate_service;
 
@@ -97,5 +97,6 @@ fn testnet_genesis(initial_authorities: Vec<AuthorityId>, endowed_accounts: Vec<
 		upgrade_key: Some(UpgradeKeyConfig {
 			key: upgrade_key,
 		}),
+		utxo: None, // Some(UtxoConfig { }),
 	}
 }
