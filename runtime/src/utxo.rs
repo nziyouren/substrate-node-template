@@ -16,10 +16,10 @@ pub trait Trait: system::Trait {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 pub struct Transaction {
-	/// List of existing UTXOs to be used as inputs for current transaction
+	/// Existing UTXOs to be used as inputs for current transaction
 	pub inputs: Vec<TransactionInput>,
 
-	/// List of UTXOs to be created as a result of current transaction dispatch
+	/// UTXOs to be created as a result of current transaction dispatch
 	pub outputs: Vec<TransactionOutput>,
 }
 
@@ -27,27 +27,27 @@ pub struct Transaction {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 pub struct TransactionInput {
-	/// Reference to an Existing UTXO to be spent
+	/// Reference to an existing UTXO to be spent
 	pub parent_output: H256,
 
 	/// Proof that transaction owner is authorized to spend referred UTXO
 	pub signature: Signature,
 }
 
-/// Single transaction output to create as a result of a transaction dispatch
+/// Single transaction output to create upon transaction dispatch
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, Hash)]
 pub struct TransactionOutput {
-	/// Value to be assigned to this UTXO
+	/// Value associated with this output
 	pub value: u128,
 
-	/// Public key to be associated with this UTXO. In order to spend this UTXO
-	/// owner must provide a proof by hashing `TransactionOutput` and signing it
-	/// with a corresponding private key.
+	/// Public key associated with this output. In order to spend this output
+	/// owner must provide a proof by hashing whole `TransactionOutput` and
+	/// signing it with a corresponding private key.
 	pub pubkey: H256,
 
 	/// Unique (potentially random) value used to distinguish this
-	/// particular UTXO from others addressed to the same public
+	/// particular output from others addressed to the same public
 	/// key with the same value. Prevents potential replay attacks.
 	pub salt: u32,
 }
@@ -69,12 +69,14 @@ decl_module! {
 
 decl_storage! {
 	trait Store for Module<T: Trait> as Utxo {
+		/// All valid unspent transaction outputs are stored in this map.
 		UnspentOutputs get(utxo): map H256 => Option<TransactionOutput>;
 	}
 }
 
 decl_event!(
 	pub enum Event {
+		/// Transaction was executed successfully
 		TransactionExecuted(Transaction),
 	}
 );
@@ -86,8 +88,8 @@ impl<T: Trait> Module<T> {
 	/// - inputs and outputs are not empty
 	/// - all inputs match to existing and unspent outputs
 	/// - each unspent output is used exactly once
-	/// - each output is defined exactly once
-	/// - total output value must be nonzero and not exceed total input value
+	/// - each output is defined exactly once and has nonzero value
+	/// - total output value must not exceed total input value
 	/// - new outputs do not collide with existing ones
 	/// - provided signatures are valid
 	fn check_transaction(transaction: &Transaction) -> Result {
@@ -125,7 +127,7 @@ impl<T: Trait> Module<T> {
 				// Fetch UTXO from the storage
 				let output = match Self::utxo(&input.parent_output) {
 					Some(output) => output,
-					None => return Err("all linked outputs must exist and be unspent"),
+					None => return Err("all parent outputs must exist and be unspent"),
 				};
 
 				// Check that we're authorized to use it
@@ -151,7 +153,7 @@ impl<T: Trait> Module<T> {
 				ensure!(output.value != 0, "output value must be nonzero");
 
 				let hash = BlakeTwo256::hash_of(output);
-				ensure!(!<UnspentOutputs<T>>::exists(hash), "UTXO already exists");
+				ensure!(!<UnspentOutputs<T>>::exists(hash), "output already exists");
 
 				match sum.checked_add(output.value) {
 					Some(sum) => Ok(sum),
@@ -187,6 +189,8 @@ impl<T: Trait> Module<T> {
 		<system::Module<T>>::deposit_event(event);
 	}
 
+	/// DANGEROUS! Adds specified output to the storage potentially overwriting existing one.
+	/// Does not perform any checks. Must only be used for testing purposes.
 	#[cfg(test)]
 	fn insert_utxo(output: TransactionOutput) -> H256 {
 		let hash = BlakeTwo256::hash_of(&output);
@@ -225,7 +229,7 @@ mod tests {
 		type Digest = Digest;
 		type AccountId = u64;
 		type Header = Header;
-		type Event = ();
+		type Event = Event;
 		type Log = DigestItem;
 	}
 
