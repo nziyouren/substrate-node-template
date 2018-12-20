@@ -229,7 +229,7 @@ mod tests {
 		type Digest = Digest;
 		type AccountId = u64;
 		type Header = Header;
-		type Event = Event;
+		type Event = ();
 		type Log = DigestItem;
 	}
 
