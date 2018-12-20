@@ -414,6 +414,33 @@ impl_runtime_apis! {
 
 	impl TaggedTransactionQueue<Block> for Runtime {
 		fn validate_transaction(tx: <Block as BlockT>::Extrinsic) -> TransactionValidity {
+			use parity_codec::Encode;
+			use srml_support::IsSubType;
+			use runtime_primitives::{
+				traits::Hash,
+				transaction_validity::{TransactionLongevity, TransactionPriority, TransactionValidity},
+			};
+
+			// TODO Perform preliminary checks here
+			if let Some(&utxo::Call::execute(ref transaction)) = IsSubType::<utxo::Module<Runtime>>::is_aux_sub_type(&tx.function) {
+				let requires = transaction.inputs
+					.iter()
+					.map(|input| input.parent_output.as_fixed_bytes().to_vec())
+					.collect();
+
+				let provides = transaction.outputs
+					.iter()
+					.map(|output| BlakeTwo256::hash_of(output).as_fixed_bytes().to_vec())
+					.collect();
+
+				return TransactionValidity::Valid {
+					requires,
+					provides,
+					priority: tx.encode().len() as TransactionPriority,
+					longevity: TransactionLongevity::max_value(),
+				};
+			}
+
 			Executive::validate_transaction(tx)
 		}
 	}
