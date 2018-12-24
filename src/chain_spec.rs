@@ -1,3 +1,4 @@
+use template_node_runtime::utxo::TransactionOutput;
 use primitives::{AuthorityId, ed25519};
 use template_node_runtime::{
 	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, BalancesConfig, UpgradeKeyConfig, UtxoConfig
@@ -75,7 +76,11 @@ impl Alternative {
 	}
 }
 
-fn testnet_genesis(initial_authorities: Vec<AuthorityId>, endowed_accounts: Vec<AccountId>, upgrade_key: AccountId) -> GenesisConfig {
+fn testnet_genesis(
+	initial_authorities: Vec<AuthorityId>,
+	endowed_accounts: Vec<AccountId>,
+	upgrade_key: AccountId,
+) -> GenesisConfig {
 	GenesisConfig {
 		consensus: Some(ConsensusConfig {
 			code: include_bytes!("../runtime/wasm/target/wasm32-unknown-unknown/release/template_node_runtime.compact.wasm").to_vec(),
@@ -97,6 +102,15 @@ fn testnet_genesis(initial_authorities: Vec<AuthorityId>, endowed_accounts: Vec<
 		upgrade_key: Some(UpgradeKeyConfig {
 			key: upgrade_key,
 		}),
-		utxo: None, // Some(UtxoConfig { }),
+		utxo: Some(UtxoConfig {
+			initial_utxo: vec![
+				TransactionOutput {
+					value: 1000,
+					pubkey: ed25519::Pair::from_seed(b"Alice                           ").public().0.into(),
+					salt: 0,
+				}
+			],
+			..Default::default()
+		}),
 	}
 }

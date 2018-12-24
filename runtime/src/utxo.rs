@@ -70,8 +70,17 @@ decl_module! {
 decl_storage! {
 	trait Store for Module<T: Trait> as Utxo {
 		/// All valid unspent transaction outputs are stored in this map.
-		pub UnspentOutputs config(utxo): map H256 => Option<TransactionOutput>;
-		// Foo config(bar): u32; // this doesn't work too
+		UnspentOutputs build(|config: &GenesisConfig<T>| {
+			config.initial_utxo
+				.iter()
+				.cloned()
+				.map(|u| (BlakeTwo256::hash_of(&u), u))
+				.collect::<Vec<_>>()
+		}): map H256 => Option<TransactionOutput>;
+	}
+
+	add_extra_genesis {
+		config(initial_utxo): Vec<TransactionOutput>;
 	}
 }
 
@@ -203,7 +212,6 @@ impl<T: Trait> Module<T> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use primitives::blake2_256;
 	use primitives::ed25519::Pair;
 	use primitives::Blake2Hasher;
 	use runtime_io::with_externalities;
@@ -268,7 +276,7 @@ mod tests {
 	#[test]
 	fn valid_transaction() {
 		with_externalities(&mut new_test_ext(), || {
-			let keypair = Pair::from_seed(&blake2_256(b"test"));
+			let keypair = Pair::from_seed(b"Alice                           ");
 
 			let parent_hash = Utxo::insert_utxo(
 				TransactionOutput {
