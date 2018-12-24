@@ -222,6 +222,8 @@ mod tests {
 		BuildStorage,
 	};
 
+	use Runtime;
+
 	impl_outer_origin! {
 		pub enum Origin for Test {}
 	}
@@ -248,8 +250,30 @@ mod tests {
 
 	type Utxo = Module<Test>;
 
+	fn alice_utxo() -> (H256, TransactionOutput) {
+		let transaction = TransactionOutput {
+			value: u128::max_value(),
+			pubkey: Pair::from_seed(b"Alice                           ").public().0.into(),
+			salt: 0,
+		};
+
+		(BlakeTwo256::hash_of(&transaction), transaction)
+	}
+
 	fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-		system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
+		let mut config = system::GenesisConfig::<Test>::default().build_storage().unwrap().0;
+
+		config.extend(
+			GenesisConfig::<Runtime> {
+				initial_utxo: vec![alice_utxo().1],
+				..Default::default()
+			}
+			.build_storage()
+			.unwrap()
+			.0,
+		);
+
+		config.into()
 	}
 
 	#[test]
@@ -277,14 +301,7 @@ mod tests {
 	fn valid_transaction() {
 		with_externalities(&mut new_test_ext(), || {
 			let keypair = Pair::from_seed(b"Alice                           ");
-
-			let parent_hash = Utxo::insert_utxo(
-				TransactionOutput {
-					value: 100,
-					pubkey: keypair.public().0.into(),
-					salt: 0,
-				}
-			);
+			let (parent_hash, _) = alice_utxo();
 
 			let transaction = Transaction {
 				inputs: vec![
