@@ -105,7 +105,7 @@ fn testnet_genesis(
 		utxo: Some(UtxoConfig {
 			initial_utxo: vec![
 				TransactionOutput {
-					value: 1000,
+					value: u128::max_value(),
 					pubkey: ed25519::Pair::from_seed(b"Alice                           ").public().0.into(),
 					salt: 0,
 				}
