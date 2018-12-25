@@ -135,10 +135,8 @@ impl<T: Trait> Module<T> {
 		let total_input = transaction.inputs.iter().fold(Ok(0u128), |sum, input| {
 			sum.and_then(|sum| {
 				// Fetch UTXO from the storage
-				let output = match <UnspentOutputs<T>>::get(&input.parent_output) {
-					Some(output) => output,
-					None => return Err("all parent outputs must exist and be unspent"),
-				};
+				let output = <UnspentOutputs<T>>::get(&input.parent_output)
+					.ok_or("all parent outputs must exist and be unspent")?;
 
 				// Check that we're authorized to use it
 				ensure!(
@@ -151,10 +149,7 @@ impl<T: Trait> Module<T> {
 				);
 
 				// Add the value to the input total
-				match sum.checked_add(output.value) {
-					Some(sum) => Ok(sum),
-					None => Err("input value overflow"),
-				}
+				sum.checked_add(output.value).ok_or("input value overflow")
 			})
 		})?;
 
@@ -165,10 +160,7 @@ impl<T: Trait> Module<T> {
 				let hash = BlakeTwo256::hash_of(output);
 				ensure!(!<UnspentOutputs<T>>::exists(hash), "output already exists");
 
-				match sum.checked_add(output.value) {
-					Some(sum) => Ok(sum),
-					None => Err("output value overflow"),
-				}
+				sum.checked_add(output.value).ok_or("output value overflow")
 			})
 		})?;
 
