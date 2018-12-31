@@ -292,18 +292,14 @@ impl_runtime_apis! {
 
 			// TODO Perform preliminary checks here
 			if let Some(&utxo::Call::execute(ref transaction)) = IsSubType::<utxo::Module<Runtime>>::is_aux_sub_type(&tx.function) {
+				// If referred UTXO is not found in the storage yet, then we need
+				// to tag current transaction as requiring that particular UTXO.
+				// If it is found then requirement is already met, hence no need to tag.
 				let requires = transaction.inputs
 					.iter()
-					.filter_map(|input| {
-						match <utxo::UnspentOutputs<Runtime>>::get(&input.parent_output) {
-							// Referred UTXO is not found in the storage yet, hence we need
-							// to tag current transaction as requiring that particular UTXO
-							None => Some(input.parent_output.as_fixed_bytes().to_vec()),
-
-							// UTXO is found in the storage, hence requirement is already met
-							Some(_) => None,
-						}
-					})
+					.map(|input| input.parent_output)
+					.filter(|hash| ! <utxo::UnspentOutputs<Runtime>>::exists(hash))
+					.map(|hash| hash.as_fixed_bytes().to_vec())
 					.collect();
 
 				let provides = transaction.outputs
