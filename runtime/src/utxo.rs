@@ -70,7 +70,7 @@ decl_module! {
 decl_storage! {
 	trait Store for Module<T: Trait> as Utxo {
 		/// All valid unspent transaction outputs are stored in this map.
-		UnspentOutputs build(|config: &GenesisConfig<T>| {
+		pub UnspentOutputs build(|config: &GenesisConfig<T>| {
 			config.initial_utxo
 				.iter()
 				.cloned()

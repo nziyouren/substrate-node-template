@@ -284,7 +284,7 @@ impl_runtime_apis! {
 	impl runtime_api::TaggedTransactionQueue<Block> for Runtime {
 		fn validate_transaction(tx: <Block as BlockT>::Extrinsic) -> TransactionValidity {
 			use parity_codec::Encode;
-			use srml_support::IsSubType;
+			use srml_support::{IsSubType, StorageMap};
 			use runtime_primitives::{
 				traits::Hash,
 				transaction_validity::{TransactionLongevity, TransactionPriority, TransactionValidity},
@@ -294,7 +294,16 @@ impl_runtime_apis! {
 			if let Some(&utxo::Call::execute(ref transaction)) = IsSubType::<utxo::Module<Runtime>>::is_aux_sub_type(&tx.function) {
 				let requires = transaction.inputs
 					.iter()
-					.map(|input| input.parent_output.as_fixed_bytes().to_vec())
+					.filter_map(|input| {
+						match <utxo::UnspentOutputs<Runtime>>::get(&input.parent_output) {
+							// Referred UTXO is not found in the storage yet, hence we need
+							// to tag current transaction as requiring that particular UTXO
+							None => Some(input.parent_output.as_fixed_bytes().to_vec()),
+
+							// UTXO is found in the storage, hence requirement is already met
+							Some(_) => None,
+						}
+					})
 					.collect();
 
 				let provides = transaction.outputs
