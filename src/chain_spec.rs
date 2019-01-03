@@ -1,4 +1,4 @@
-use template_node_runtime::utxo::TransactionOutput;
+use template_node_runtime::utxo;
 use primitives::{AuthorityId, ed25519};
 use template_node_runtime::{
 	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, BalancesConfig, UpgradeKeyConfig, UtxoConfig
@@ -104,8 +104,8 @@ fn testnet_genesis(
 		}),
 		utxo: Some(UtxoConfig {
 			initial_utxo: vec![
-				TransactionOutput {
-					value: u128::max_value(),
+				utxo::TransactionOutput {
+					value: utxo::Value::max_value(),
 					pubkey: ed25519::Pair::from_seed(b"Alice                           ").public().0.into(),
 					salt: 0,
 				}

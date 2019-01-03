@@ -12,6 +12,9 @@ pub trait Trait: system::Trait {
 	type Event: From<Event> + Into<<Self as system::Trait>::Event>;
 }
 
+/// Representation of UTXO value
+pub type Value = u128;
+
 /// Single transaction to be dispatched
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
@@ -39,7 +42,7 @@ pub struct TransactionInput {
 #[derive(Default, PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, Hash)]
 pub struct TransactionOutput {
 	/// Value associated with this output
-	pub value: u128,
+	pub value: Value,
 
 	/// Public key associated with this output. In order to spend this output
 	/// owner must provide a proof by hashing whole `TransactionOutput` and
@@ -97,7 +100,7 @@ decl_event!(
 /// Information collected during transaction verification
 pub enum CheckInfo {
 	/// Total input and output value
-	Totals((u128, u128)),
+	Totals((Value, Value)),
 
 	/// Some referred UTXOs were missing
 	MissingInputs(Vec<H256>),
@@ -147,7 +150,7 @@ impl<T: Trait> Module<T> {
 			);
 		}
 
-		let mut total_input = 0u128;
+		let mut total_input: Value = 0;
 		let mut missing_utxo = Vec::new();
 		for input in transaction.inputs.iter() {
 			// Fetch UTXO from the storage
@@ -169,7 +172,7 @@ impl<T: Trait> Module<T> {
 			}
 		}
 
-		let mut total_output = 0u128;
+		let mut total_output: Value = 0;
 		for output in transaction.outputs.iter() {
 			ensure!(output.value != 0, "output value must be nonzero");
 
@@ -259,7 +262,7 @@ mod tests {
 
 	fn alice_utxo() -> (H256, TransactionOutput) {
 		let transaction = TransactionOutput {
-			value: u128::max_value(),
+			value: Value::max_value(),
 			pubkey: Pair::from_seed(b"Alice                           ").public().0.into(),
 			salt: 0,
 		};

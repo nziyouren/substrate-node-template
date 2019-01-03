@@ -309,7 +309,8 @@ impl_runtime_apis! {
 						requires = Vec::new();
 
 						// Priority is based on a transaction fee that is equal to the leftover value
-						priority = (inputs - outputs) as TransactionPriority; // FIXME u128 to u64 downcast
+						let max_priority = utxo::Value::from(TransactionPriority::max_value());
+						priority = max_priority.min(inputs - outputs) as TransactionPriority;
 					}
 
 					// All checks passed except that some of inputs were missing
