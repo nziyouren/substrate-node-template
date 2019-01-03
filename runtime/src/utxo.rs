@@ -60,7 +60,6 @@ decl_module! {
 		pub fn execute(origin, transaction: Transaction) -> Result {
 			ensure_inherent(origin)?;
 
-
 			if let CheckInfo::MissingInputs(_) = Self::check_transaction(&transaction)? {
 				return Err("all parent outputs must exist and be unspent");
 			}
@@ -166,7 +165,7 @@ impl<T: Trait> Module<T> {
 				);
 
 				// Add the value to the input total
-				total_input += total_input.checked_add(output.value).ok_or("input value overflow")?;
+				total_input = total_input.checked_add(output.value).ok_or("input value overflow")?;
 			} else {
 				missing_utxo.push(input.parent_output);
 			}
@@ -179,7 +178,7 @@ impl<T: Trait> Module<T> {
 			let hash = BlakeTwo256::hash_of(output);
 			ensure!(!<UnspentOutputs<T>>::exists(hash), "output already exists");
 
-			total_output += total_output.checked_add(output.value).ok_or("output value overflow")?;
+			total_output = total_output.checked_add(output.value).ok_or("output value overflow")?;
 		}
 
 		if missing_utxo.is_empty() {
