@@ -57,9 +57,12 @@ decl_module! {
 		pub fn execute(origin, transaction: Transaction) -> Result {
 			ensure_inherent(origin)?;
 
-			Self::check_transaction(&transaction)?;
-			Self::update_storage(&transaction);
 
+			if let CheckInfo::MissingInputs(_) = Self::check_transaction(&transaction)? {
+				return Err("all parent outputs must exist and be unspent");
+			}
+
+			Self::update_storage(&transaction);
 			Self::deposit_event(Event::TransactionExecuted(transaction));
 
 			Ok(())
@@ -91,6 +94,18 @@ decl_event!(
 	}
 );
 
+/// Information collected during transaction verification
+pub enum CheckInfo {
+	/// Total input and output value
+	Totals((u128, u128)),
+
+	/// Some referred UTXOs were missing
+	MissingInputs(Vec<H256>),
+}
+
+/// Result of transaction verification
+pub type CheckResult = rstd::result::Result<CheckInfo, &'static str>;
+
 impl<T: Trait> Module<T> {
 	/// Check transaction for validity.
 	///
@@ -102,7 +117,7 @@ impl<T: Trait> Module<T> {
 	/// - total output value must not exceed total input value
 	/// - new outputs do not collide with existing ones
 	/// - provided signatures are valid
-	fn check_transaction(transaction: &Transaction) -> Result {
+	pub fn check_transaction(transaction: &Transaction) -> CheckResult {
 		ensure!(!transaction.inputs.is_empty(), "no inputs");
 		ensure!(!transaction.outputs.is_empty(), "no outputs");
 
@@ -132,12 +147,11 @@ impl<T: Trait> Module<T> {
 			);
 		}
 
-		let total_input = transaction.inputs.iter().fold(Ok(0u128), |sum, input| {
-			sum.and_then(|sum| {
-				// Fetch UTXO from the storage
-				let output = <UnspentOutputs<T>>::get(&input.parent_output)
-					.ok_or("all parent outputs must exist and be unspent")?;
-
+		let mut total_input = 0u128;
+		let mut missing_utxo = Vec::new();
+		for input in transaction.inputs.iter() {
+			// Fetch UTXO from the storage
+			if let Some(output) = <UnspentOutputs<T>>::get(&input.parent_output) {
 				// Check that we're authorized to use it
 				ensure!(
 					ed25519_verify(
@@ -149,27 +163,28 @@ impl<T: Trait> Module<T> {
 				);
 
 				// Add the value to the input total
-				sum.checked_add(output.value).ok_or("input value overflow")
-			})
-		})?;
+				total_input += total_input.checked_add(output.value).ok_or("input value overflow")?;
+			} else {
+				missing_utxo.push(input.parent_output);
+			}
+		}
 
-		let total_output = transaction.outputs.iter().fold(Ok(0u128), |sum, output| {
-			sum.and_then(|sum| {
-				ensure!(output.value != 0, "output value must be nonzero");
+		let mut total_output = 0u128;
+		for output in transaction.outputs.iter() {
+			ensure!(output.value != 0, "output value must be nonzero");
 
-				let hash = BlakeTwo256::hash_of(output);
-				ensure!(!<UnspentOutputs<T>>::exists(hash), "output already exists");
+			let hash = BlakeTwo256::hash_of(output);
+			ensure!(!<UnspentOutputs<T>>::exists(hash), "output already exists");
 
-				sum.checked_add(output.value).ok_or("output value overflow")
-			})
-		})?;
+			total_output += total_output.checked_add(output.value).ok_or("output value overflow")?;
+		}
 
-		ensure!(
-			total_input >= total_output,
-			"output value must not exceed input value"
-		);
-
-		Ok(())
+		if missing_utxo.is_empty() {
+			ensure!(total_input >= total_output, "output value must not exceed input value");
+			Ok(CheckInfo::Totals((total_input, total_output)))
+		} else {
+			Ok(CheckInfo::MissingInputs(missing_utxo))
+		}
 	}
 
 	/// Update storage to reflect changes made by transaction

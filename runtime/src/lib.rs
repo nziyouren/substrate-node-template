@@ -283,25 +283,51 @@ impl_runtime_apis! {
 
 	impl runtime_api::TaggedTransactionQueue<Block> for Runtime {
 		fn validate_transaction(tx: <Block as BlockT>::Extrinsic) -> TransactionValidity {
-			use parity_codec::Encode;
-			use srml_support::{IsSubType, StorageMap};
+			use srml_support::IsSubType;
 			use runtime_primitives::{
 				traits::Hash,
 				transaction_validity::{TransactionLongevity, TransactionPriority, TransactionValidity},
 			};
 
-			// TODO Perform preliminary checks here
 			if let Some(&utxo::Call::execute(ref transaction)) = IsSubType::<utxo::Module<Runtime>>::is_aux_sub_type(&tx.function) {
-				// If referred UTXO is not found in the storage yet, then we need
-				// to tag current transaction as requiring that particular UTXO.
-				// If it is found then requirement is already met, hence no need to tag.
-				let requires = transaction.inputs
-					.iter()
-					.map(|input| input.parent_output)
-					.filter(|hash| ! <utxo::UnspentOutputs<Runtime>>::exists(hash))
-					.map(|hash| hash.as_fixed_bytes().to_vec())
-					.collect();
+				// List of tags to require
+				let requires;
 
+				// Transaction priority to assign
+				let priority;
+
+				match <utxo::Module<Runtime>>::check_transaction(&transaction) {
+					// Verification failed
+					Err(e) => {
+						runtime_io::print(e);
+						return TransactionValidity::Invalid;
+					}
+
+					// Transaction was fully verified and valid
+					Ok(utxo::CheckInfo::Totals((inputs, outputs))) => {
+						// All input UTXO were found, so we consider input conditions to be met.
+						requires = Vec::new();
+
+						// Priority is based on a transaction fee that is equal to the leftover value
+						priority = (inputs - outputs) as TransactionPriority; // FIXME u128 to u64 downcast
+					}
+
+					// All checks passed except that some of inputs were missing
+					Ok(utxo::CheckInfo::MissingInputs(missing)) => {
+						// If referred UTXO is not found in the storage yet, then we need
+						// to tag current transaction as requiring that particular UTXO.
+						requires = missing
+							.iter()
+							.map(|hash| hash.as_fixed_bytes().to_vec())
+							.collect();
+
+						// Transaction could not be validated yet,
+						// so we have no sane way to calculate the priority
+						priority = 0;
+					}
+				}
+
+				// Output tags that this transaction provides
 				let provides = transaction.outputs
 					.iter()
 					.map(|output| BlakeTwo256::hash_of(output).as_fixed_bytes().to_vec())
@@ -310,11 +336,12 @@ impl_runtime_apis! {
 				return TransactionValidity::Valid {
 					requires,
 					provides,
-					priority: tx.encode().len() as TransactionPriority,
+					priority,
 					longevity: TransactionLongevity::max_value(),
 				};
 			}
 
+			// Fall back to default logic for other extrinsics
 			Executive::validate_transaction(tx)
 		}
 	}
