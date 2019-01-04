@@ -8,7 +8,7 @@ use srml_support::{
 	StorageValue,
 };
 use system::ensure_inherent;
-use System;
+use {System, Consensus};
 
 pub trait Trait: system::Trait {
 	type Event: From<Event> + Into<<Self as system::Trait>::Event>;
@@ -71,6 +71,11 @@ decl_module! {
 			Self::deposit_event(Event::TransactionExecuted(transaction));
 
 			Ok(())
+		}
+
+		fn on_finalise() {
+			let authorities: Vec<_> = Consensus::authorities().iter().map(|a| a.clone().into()).collect();
+			Self::spend_leftover(&authorities);
 		}
 	}
 }
@@ -197,7 +202,7 @@ impl<T: Trait> Module<T> {
 	}
 
 	/// Redistribute combined leftover value of all transactions evenly across authorities
-	pub fn spend_leftover(authorities: &[H256]) {
+	fn spend_leftover(authorities: &[H256]) {
 		let leftover = <LeftoverTotal<T>>::take();
 		let share_value = leftover / authorities.len() as u128;
 
