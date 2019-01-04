@@ -5,8 +5,10 @@ use runtime_primitives::traits::{BlakeTwo256, Hash};
 use srml_support::{
 	dispatch::{Result, Vec},
 	StorageMap,
+	StorageValue,
 };
 use system::ensure_inherent;
+use System;
 
 pub trait Trait: system::Trait {
 	type Event: From<Event> + Into<<Self as system::Trait>::Event>;
@@ -60,11 +62,12 @@ decl_module! {
 		pub fn execute(origin, transaction: Transaction) -> Result {
 			ensure_inherent(origin)?;
 
-			if let CheckInfo::MissingInputs(_) = Self::check_transaction(&transaction)? {
-				return Err("all parent outputs must exist and be unspent");
-			}
+			let leftover = match Self::check_transaction(&transaction)? {
+				CheckInfo::MissingInputs(_) => return Err("all parent outputs must exist and be unspent"),
+				CheckInfo::Totals((input, output)) => input - output
+			};
 
-			Self::update_storage(&transaction);
+			Self::update_storage(&transaction, leftover)?;
 			Self::deposit_event(Event::TransactionExecuted(transaction));
 
 			Ok(())
@@ -75,13 +78,17 @@ decl_module! {
 decl_storage! {
 	trait Store for Module<T: Trait> as Utxo {
 		/// All valid unspent transaction outputs are stored in this map.
-		pub UnspentOutputs build(|config: &GenesisConfig<T>| {
+		UnspentOutputs build(|config: &GenesisConfig<T>| {
 			config.initial_utxo
 				.iter()
 				.cloned()
 				.map(|u| (BlakeTwo256::hash_of(&u), u))
 				.collect::<Vec<_>>()
 		}): map H256 => Option<TransactionOutput>;
+
+		/// Total leftover value to be redistributed
+		/// among authorities during block finalization.
+		LeftoverTotal: Value;
 	}
 
 	add_extra_genesis {
@@ -189,8 +196,43 @@ impl<T: Trait> Module<T> {
 		}
 	}
 
+	/// Redistribute combined leftover value of all transactions evenly across authorities
+	pub fn spend_leftover(authorities: &[H256]) {
+		let leftover = <LeftoverTotal<T>>::take();
+		let share_value = leftover / authorities.len() as u128;
+
+		if share_value == 0 { return }
+
+		for authority in authorities {
+			let utxo = TransactionOutput {
+				pubkey: *authority,
+				value: share_value,
+				salt: System::block_number() as u32,
+			};
+
+			let hash = BlakeTwo256::hash_of(&utxo);
+
+			if !<UnspentOutputs<T>>::exists(hash) {
+				<UnspentOutputs<T>>::insert(hash, utxo);
+
+				runtime_io::print("leftover share sent to");
+				runtime_io::print(hash.as_fixed_bytes() as &[u8]);
+			} else {
+				runtime_io::print("leftover share wasted due to hash collision");
+			}
+		}
+	}
+
 	/// Update storage to reflect changes made by transaction
-	fn update_storage(transaction: &Transaction) {
+	fn update_storage(transaction: &Transaction, leftover: Value) -> Result {
+		// Calculate new leftover total
+		let new_total = <LeftoverTotal<T>>::get()
+			.checked_add(leftover)
+			.ok_or("leftover overflow")?;
+
+		// Storing updated leftover value
+		<LeftoverTotal<T>>::put(new_total);
+
 		// Remove all used UTXO to mark them as spent
 		for input in &transaction.inputs {
 			<UnspentOutputs<T>>::remove(input.parent_output);
@@ -201,6 +243,8 @@ impl<T: Trait> Module<T> {
 			let hash = BlakeTwo256::hash_of(output);
 			<UnspentOutputs<T>>::insert(hash, output);
 		}
+
+		Ok(())
 	}
 
 	fn deposit_event(event: Event) {

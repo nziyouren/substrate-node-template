@@ -250,6 +250,10 @@ impl_runtime_apis! {
 		}
 
 		fn finalise_block() -> <Block as BlockT>::Header {
+			// Redistribute combined leftover value of all transactions evenly across authorities
+			let authorities: Vec<_> = Consensus::authorities().iter().map(|a| a.clone().into()).collect();
+			<utxo::Module<Runtime>>::spend_leftover(&authorities);
+
 			Executive::finalise_block()
 		}
 
