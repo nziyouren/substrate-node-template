@@ -59,12 +59,13 @@ pub struct TransactionOutput {
 
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+		/// Dispatch a single transaction and update UTXO set accordingly
 		pub fn execute(origin, transaction: Transaction) -> Result {
 			ensure_inherent(origin)?;
 
 			let leftover = match Self::check_transaction(&transaction)? {
 				CheckInfo::MissingInputs(_) => return Err("all parent outputs must exist and be unspent"),
-				CheckInfo::Totals((input, output)) => input - output
+				CheckInfo::Totals { input, output } => input - output
 			};
 
 			Self::update_storage(&transaction, leftover)?;
@@ -73,6 +74,7 @@ decl_module! {
 			Ok(())
 		}
 
+		/// Called on block finalization
 		fn on_finalise() {
 			let authorities: Vec<_> = Consensus::authorities().iter().map(|a| a.clone().into()).collect();
 			Self::spend_leftover(&authorities);
@@ -110,8 +112,8 @@ decl_event!(
 
 /// Information collected during transaction verification
 pub enum CheckInfo {
-	/// Total input and output value
-	Totals((Value, Value)),
+	/// Combined value of all inputs and outputs
+	Totals { input: Value, output: Value },
 
 	/// Some referred UTXOs were missing
 	MissingInputs(Vec<H256>),
@@ -195,16 +197,16 @@ impl<T: Trait> Module<T> {
 
 		if missing_utxo.is_empty() {
 			ensure!(total_input >= total_output, "output value must not exceed input value");
-			Ok(CheckInfo::Totals((total_input, total_output)))
+			Ok(CheckInfo::Totals { input: total_input, output: total_output })
 		} else {
 			Ok(CheckInfo::MissingInputs(missing_utxo))
 		}
 	}
 
-	/// Redistribute combined leftover value of all transactions evenly across authorities
+	/// Redistribute combined leftover value of all transactions evenly among authorities
 	fn spend_leftover(authorities: &[H256]) {
 		let leftover = <LeftoverTotal<T>>::take();
-		let share_value = leftover / authorities.len() as u128;
+		let share_value = leftover / authorities.len() as Value;
 
 		if share_value == 0 { return }
 
@@ -238,7 +240,7 @@ impl<T: Trait> Module<T> {
 		// Storing updated leftover value
 		<LeftoverTotal<T>>::put(new_total);
 
-		// Remove all used UTXO to mark them as spent
+		// Remove all used UTXO since they are now spent
 		for input in &transaction.inputs {
 			<UnspentOutputs<T>>::remove(input.parent_output);
 		}

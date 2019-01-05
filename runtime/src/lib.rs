@@ -304,16 +304,16 @@ impl_runtime_apis! {
 					}
 
 					// Transaction was fully verified and valid
-					Ok(utxo::CheckInfo::Totals((inputs, outputs))) => {
+					Ok(utxo::CheckInfo::Totals { input, output }) => {
 						// All input UTXO were found, so we consider input conditions to be met.
 						requires = Vec::new();
 
 						// Priority is based on a transaction fee that is equal to the leftover value
 						let max_priority = utxo::Value::from(TransactionPriority::max_value());
-						priority = max_priority.min(inputs - outputs) as TransactionPriority;
+						priority = max_priority.min(input - output) as TransactionPriority;
 					}
 
-					// All checks passed except that some of inputs were missing
+					// All checks passed except that some of inputs are missing
 					Ok(utxo::CheckInfo::MissingInputs(missing)) => {
 						// If referred UTXO is not found in the storage yet, then we need
 						// to tag current transaction as requiring that particular UTXO.
