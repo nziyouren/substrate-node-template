@@ -289,6 +289,7 @@ impl_runtime_apis! {
 				transaction_validity::{TransactionLongevity, TransactionPriority, TransactionValidity},
 			};
 
+			// Extrinsics representing UTXO transaction need some special handling
 			if let Some(&utxo::Call::execute(ref transaction)) = IsSubType::<utxo::Module<Runtime>>::is_aux_sub_type(&tx.function) {
 				// List of tags to require
 				let requires;
@@ -303,9 +304,9 @@ impl_runtime_apis! {
 						return TransactionValidity::Invalid;
 					}
 
-					// Transaction was fully verified and valid
+					// Transaction was fully verified and is valid
 					Ok(utxo::CheckInfo::Totals { input, output }) => {
-						// All input UTXO were found, so we consider input conditions to be met.
+						// All input UTXOs were found, so we consider input conditions to be met
 						requires = Vec::new();
 
 						// Priority is based on a transaction fee that is equal to the leftover value
@@ -315,14 +316,14 @@ impl_runtime_apis! {
 
 					// All checks passed except that some of inputs are missing
 					Ok(utxo::CheckInfo::MissingInputs(missing)) => {
-						// If referred UTXO is not found in the storage yet, then we need
-						// to tag current transaction as requiring that particular UTXO.
+						// Since some referred UTXOs were not found in the storage yet,
+						// we tag current transaction as requiring those particular UTXOs
 						requires = missing
 							.iter()
 							.map(|hash| hash.as_fixed_bytes().to_vec())
 							.collect();
 
-						// Transaction could not be validated yet,
+						// Transaction could not be validated at this point,
 						// so we have no sane way to calculate the priority
 						priority = 0;
 					}

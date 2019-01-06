@@ -74,7 +74,7 @@ decl_module! {
 			Ok(())
 		}
 
-		/// Called on block finalization
+		/// Hanler called by the system on block finalization
 		fn on_finalise() {
 			let authorities: Vec<_> = Consensus::authorities().iter().map(|a| a.clone().into()).collect();
 			Self::spend_leftover(&authorities);
@@ -85,6 +85,7 @@ decl_module! {
 decl_storage! {
 	trait Store for Module<T: Trait> as Utxo {
 		/// All valid unspent transaction outputs are stored in this map.
+		/// Initial set of UTXO is populated from the list stored in genesis.
 		UnspentOutputs build(|config: &GenesisConfig<T>| {
 			config.initial_utxo
 				.iter()
@@ -95,6 +96,8 @@ decl_storage! {
 
 		/// Total leftover value to be redistributed
 		/// among authorities during block finalization.
+		/// It is accumulated during transaction execution
+		/// and then drained once per block.
 		LeftoverTotal: Value;
 	}
 
@@ -111,16 +114,16 @@ decl_event!(
 );
 
 /// Information collected during transaction verification
-pub enum CheckInfo {
+pub enum CheckInfo<'a> {
 	/// Combined value of all inputs and outputs
 	Totals { input: Value, output: Value },
 
 	/// Some referred UTXOs were missing
-	MissingInputs(Vec<H256>),
+	MissingInputs(Vec<&'a H256>),
 }
 
 /// Result of transaction verification
-pub type CheckResult = rstd::result::Result<CheckInfo, &'static str>;
+pub type CheckResult<'a> = rstd::result::Result<CheckInfo<'a>, &'static str>;
 
 impl<T: Trait> Module<T> {
 	/// Check transaction for validity.
@@ -133,7 +136,7 @@ impl<T: Trait> Module<T> {
 	/// - total output value must not exceed total input value
 	/// - new outputs do not collide with existing ones
 	/// - provided signatures are valid
-	pub fn check_transaction(transaction: &Transaction) -> CheckResult {
+	pub fn check_transaction(transaction: &Transaction) -> CheckResult<'_> {
 		ensure!(!transaction.inputs.is_empty(), "no inputs");
 		ensure!(!transaction.outputs.is_empty(), "no outputs");
 
@@ -181,7 +184,7 @@ impl<T: Trait> Module<T> {
 				// Add the value to the input total
 				total_input = total_input.checked_add(output.value).ok_or("input value overflow")?;
 			} else {
-				missing_utxo.push(input.parent_output);
+				missing_utxo.push(&input.parent_output);
 			}
 		}
 
