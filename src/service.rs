@@ -63,7 +63,7 @@ construct_service_factory! {
 						client,
 						proposer,
 						service.network(),
-                        service.on_exit(),
+						service.exit(),
 					));
 				}
 
