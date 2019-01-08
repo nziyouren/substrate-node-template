@@ -18,6 +18,7 @@ extern crate substrate_network as network;
 #[macro_use]
 extern crate substrate_executor;
 extern crate substrate_transaction_pool as transaction_pool;
+extern crate substrate_basic_authorship as basic_authorship;
 #[macro_use]
 extern crate substrate_service;
 extern crate template_node_runtime;

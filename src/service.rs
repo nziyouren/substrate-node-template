@@ -10,6 +10,7 @@ use substrate_service::{
 	FullClient, LightClient, LightBackend, FullExecutor, LightExecutor,
 	TaskExecutor,
 };
+use basic_authorship::ProposerFactory;
 use node_executor;
 use consensus::{import_queue, start_aura, AuraImportQueue, SlotDuration, NothingExtra};
 use client;
@@ -50,7 +51,7 @@ construct_service_factory! {
 			|service: Self::FullService, executor: TaskExecutor, key: Option<Arc<Pair>>| {
 				if let Some(key) = key {
 					info!("Using authority key {}", key.public());
-					let proposer = Arc::new(substrate_service::ProposerFactory {
+					let proposer = Arc::new(ProposerFactory {
 						client: service.client(),
 						transaction_pool: service.transaction_pool(),
 					});
@@ -62,6 +63,7 @@ construct_service_factory! {
 						client,
 						proposer,
 						service.network(),
+                        service.on_exit(),
 					));
 				}
 
