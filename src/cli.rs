@@ -3,7 +3,7 @@ use futures::{future, Future, sync::oneshot};
 use std::cell::RefCell;
 use tokio::runtime::Runtime;
 pub use substrate_cli::{VersionInfo, IntoExit, error};
-use substrate_cli::{Action, informant, parse_matches, execute_default, CoreParams};
+use substrate_cli::{informant, parse_and_execute, CoreParams, GetCoreParams};
 use substrate_service::{ServiceFactory, Roles as ServiceRoles};
 use chain_spec;
 use std::ops::Deref;
@@ -12,16 +12,14 @@ use structopt::StructOpt;
 /// Extend params for Node
 #[derive(Debug, StructOpt)]
 pub struct NodeParams {
-	/// Should run as a GRANDPA authority node
-	#[structopt(long = "grandpa-authority", help = "Run Node as a GRANDPA authority, implies --validator")]
-	grandpa_authority: bool,
-
-	/// Should run as a GRANDPA authority node only
-	#[structopt(long = "grandpa-authority-only", help = "Run Node as a GRANDPA authority only, don't as a usual validator, implies --grandpa-authority")]
-	grandpa_authority_only: bool,
-
 	#[structopt(flatten)]
 	core: CoreParams
+}
+
+impl GetCoreParams for NodeParams {
+	fn core_params(&self) -> CoreParams {
+		self.core.clone()
+	}
 }
 
 /// Parse command line arguments into service configuration.
@@ -35,39 +33,38 @@ pub fn run<I, T, E>(args: I, exit: E, version: VersionInfo) -> error::Result<()>
 		version.commit
 	);
 
-	let matches = match NodeParams::clap()
+	let matches = NodeParams::clap()
 		.name(version.executable_name)
 		.author(version.author)
 		.about(version.description)
 		.version(&(full_version + "\n")[..])
-		.get_matches_from_safe(args) {
-			Ok(m) => m,
-			Err(e) => e.exit(),
-		};
+		.get_matches_from(args);
 
-	let (spec, config) = parse_matches::<service::Factory, _>(
-		load_spec, version, "substrate-node", &matches
-	)?;
-
-	match execute_default::<service::Factory, _>(spec, exit, &matches, &config)? {
-		Action::ExecutedInternally => (),
-		Action::RunService(exit) => {
+	parse_and_execute::<service::Factory, _, _, _, _>(
+		load_spec, version, "substrate-node", matches, exit,
+		|exit, _: NodeParams, config| {
 			info!("Substrate Node");
 			info!("  version {}", config.full_version());
 			info!("  by Parity Technologies, 2017, 2018");
 			info!("Chain specification: {}", config.chain_spec.name());
 			info!("Node name: {}", config.name);
 			info!("Roles: {:?}", config.roles);
-			let mut runtime = Runtime::new()?;
+			let runtime = Runtime::new().map_err(|e| format!("{:?}", e))?;
 			let executor = runtime.executor();
-			match config.roles == ServiceRoles::LIGHT {
-				true => run_until_exit(&mut runtime, service::Factory::new_light(config, executor)?, exit)?,
-				false => run_until_exit(&mut runtime, service::Factory::new_full(config, executor)?, exit)?,
-			}
+			match config.roles {
+				ServiceRoles::LIGHT => run_until_exit(
+					runtime,
+					service::Factory::new_light(config, executor).map_err(|e| format!("{:?}", e))?,
+					exit
+				),
+				_ => run_until_exit(
+					runtime,
+					service::Factory::new_full(config, executor).map_err(|e| format!("{:?}", e))?,
+					exit
+				),
+			}.map_err(|e| format!("{:?}", e))
 		}
-	}
-
-	Ok(())
+	).map_err(Into::into)
 }
 
 fn load_spec(id: &str) -> Result<Option<chain_spec::ChainSpec>, String> {
@@ -78,7 +75,7 @@ fn load_spec(id: &str) -> Result<Option<chain_spec::ChainSpec>, String> {
 }
 
 fn run_until_exit<T, C, E>(
-	runtime: &mut Runtime,
+	mut runtime: Runtime,
 	service: T,
 	e: E,
 ) -> error::Result<()>
