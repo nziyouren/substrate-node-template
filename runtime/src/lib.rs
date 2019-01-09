@@ -34,7 +34,7 @@ extern crate substrate_consensus_aura_primitives as consensus_aura;
 use rstd::prelude::*;
 #[cfg(feature = "std")]
 use primitives::bytes;
-use primitives::{AuthorityId, OpaqueMetadata};
+use primitives::{Ed25519AuthorityId, OpaqueMetadata};
 use runtime_primitives::{
 	ApplyResult, transaction_validity::TransactionValidity, Ed25519Signature, generic,
 	traits::{self, BlakeTwo256, Block as BlockT, ProvideInherent},
@@ -85,13 +85,13 @@ pub mod opaque {
 		}
 	}
 	/// Opaque block header type.
-	pub type Header = generic::Header<BlockNumber, BlakeTwo256, generic::DigestItem<Hash, AuthorityId>>;
+	pub type Header = generic::Header<BlockNumber, BlakeTwo256, generic::DigestItem<Hash, Ed25519AuthorityId>>;
 	/// Opaque block type.
 	pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 	/// Opaque block identifier type.
 	pub type BlockId = generic::BlockId<Block>;
 	/// Opaque session key type.
-	pub type SessionKey = AuthorityId;
+	pub type SessionKey = Ed25519AuthorityId;
 }
 
 /// This runtime version.
@@ -144,7 +144,7 @@ impl consensus::Trait for Runtime {
 	/// The position in the block's extrinsics that the note-offline inherent must be placed.
 	const NOTE_OFFLINE_POSITION: u32 = 1;
 	/// The identifier we use to refer to authorities.
-	type SessionKey = AuthorityId;
+	type SessionKey = Ed25519AuthorityId;
 	// The aura module handles offline-reports internally
 	// rather than using an explicit report system.
 	type InherentOfflineReport = ();
@@ -180,7 +180,7 @@ impl sudo::Trait for Runtime {
 }
 
 construct_runtime!(
-	pub enum Runtime with Log(InternalLog: DigestItem<Hash, AuthorityId>) where
+	pub enum Runtime with Log(InternalLog: DigestItem<Hash, Ed25519AuthorityId>) where
 		Block = Block,
 		NodeBlock = opaque::Block,
 		InherentData = BasicInherentData
@@ -218,7 +218,7 @@ impl_runtime_apis! {
 			VERSION
 		}
 
-		fn authorities() -> Vec<AuthorityId> {
+		fn authorities() -> Vec<Ed25519AuthorityId> {
 			Consensus::authorities()
 		}
 
