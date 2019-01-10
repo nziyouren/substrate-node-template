@@ -76,7 +76,7 @@ decl_module! {
 
 		/// Hanler called by the system on block finalization
 		fn on_finalise() {
-			let authorities: Vec<_> = Consensus::authorities().iter().map(|a| a.clone().into()).collect();
+			let authorities: Vec<_> = Consensus::authorities().iter().map(|&a| a.into()).collect();
 			Self::spend_leftover(&authorities);
 		}
 	}
