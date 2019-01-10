@@ -1,7 +1,7 @@
 use template_node_runtime::utxo;
 use primitives::{AuthorityId, ed25519};
 use template_node_runtime::{
-	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, BalancesConfig, UpgradeKeyConfig, UtxoConfig
+	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, UpgradeKeyConfig, UtxoConfig
 };
 use substrate_service;
 
@@ -31,9 +31,10 @@ impl Alternative {
 				"dev",
 				|| testnet_genesis(vec![
 					ed25519::Pair::from_seed(b"Alice                           ").public().into(),
-				], vec![
-					ed25519::Pair::from_seed(b"Alice                           ").public().0.into(),
 				],
+				// vec![
+				// 	ed25519::Pair::from_seed(b"Alice                           ").public().0.into(),
+				// ],
 					ed25519::Pair::from_seed(b"Alice                           ").public().0.into()
 				),
 				vec![],
@@ -48,14 +49,15 @@ impl Alternative {
 				|| testnet_genesis(vec![
 					ed25519::Pair::from_seed(b"Alice                           ").public().into(),
 					ed25519::Pair::from_seed(b"Bob                             ").public().into(),
-				], vec![
-					ed25519::Pair::from_seed(b"Alice                           ").public().0.into(),
-					ed25519::Pair::from_seed(b"Bob                             ").public().0.into(),
-					ed25519::Pair::from_seed(b"Charlie                         ").public().0.into(),
-					ed25519::Pair::from_seed(b"Dave                            ").public().0.into(),
-					ed25519::Pair::from_seed(b"Eve                             ").public().0.into(),
-					ed25519::Pair::from_seed(b"Ferdie                          ").public().0.into(),
 				],
+				//  vec![
+				// 	ed25519::Pair::from_seed(b"Alice                           ").public().0.into(),
+				// 	ed25519::Pair::from_seed(b"Bob                             ").public().0.into(),
+				// 	ed25519::Pair::from_seed(b"Charlie                         ").public().0.into(),
+				// 	ed25519::Pair::from_seed(b"Dave                            ").public().0.into(),
+				// 	ed25519::Pair::from_seed(b"Eve                             ").public().0.into(),
+				// 	ed25519::Pair::from_seed(b"Ferdie                          ").public().0.into(),
+				// ],
 					ed25519::Pair::from_seed(b"Alice                           ").public().0.into()
 				),
 				vec![],
@@ -78,7 +80,7 @@ impl Alternative {
 
 fn testnet_genesis(
 	initial_authorities: Vec<AuthorityId>,
-	endowed_accounts: Vec<AccountId>,
+	// endowed_accounts: Vec<AccountId>,
 	upgrade_key: AccountId,
 ) -> GenesisConfig {
 	GenesisConfig {
@@ -89,15 +91,6 @@ fn testnet_genesis(
 		system: None,
 		timestamp: Some(TimestampConfig {
 			period: 5,					// 5 second block time.
-		}),
-		balances: Some(BalancesConfig {
-			transaction_base_fee: 1,
-			transaction_byte_fee: 0,
-			existential_deposit: 500,
-			transfer_fee: 0,
-			creation_fee: 0,
-			reclaim_rebate: 0,
-			balances: endowed_accounts.iter().map(|&k|(k, (1 << 60))).collect(),
 		}),
 		upgrade_key: Some(UpgradeKeyConfig {
 			key: upgrade_key,

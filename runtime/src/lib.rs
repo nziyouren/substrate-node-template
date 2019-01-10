@@ -51,7 +51,6 @@ use consensus_aura::api as aura_api;
 pub use runtime_primitives::BuildStorage;
 pub use consensus::Call as ConsensusCall;
 pub use timestamp::Call as TimestampCall;
-pub use balances::Call as BalancesCall;
 pub use runtime_primitives::{Permill, Perbill};
 pub use timestamp::BlockPeriod;
 pub use srml_support::{StorageValue, RuntimeMetadata};
@@ -162,20 +161,6 @@ impl timestamp::Trait for Runtime {
 	type OnTimestampSet = Aura;
 }
 
-impl balances::Trait for Runtime {
-	/// The type for recording an account's balance.
-	type Balance = u128;
-	/// The type for recording indexing into the account enumeration. If this ever overflows, there
-	/// will be problems!
-	type AccountIndex = u32;
-	/// What to do if an account's free balance gets zeroed.
-	type OnFreeBalanceZero = ();
-	/// Restrict whether an account can transfer funds. We don't place any further restrictions.
-	type EnsureAccountLiquid = ();
-	/// The uniquitous event type.
-	type Event = Event;
-}
-
 impl upgrade_key::Trait for Runtime {
 	/// The uniquitous event type.
 	type Event = Event;
@@ -195,16 +180,78 @@ construct_runtime!(
 		Timestamp: timestamp::{Module, Call, Storage, Config<T>, Inherent},
 		Consensus: consensus::{Module, Call, Storage, Config<T>, Log(AuthoritiesChange), Inherent},
 		Aura: aura::{Module},
-		Balances: balances,
 		UpgradeKey: upgrade_key,
 		Utxo: utxo::{Module, Call, Storage, Config<T>, Event},
 	}
 );
 
+pub struct ChainContext<T>(::rstd::marker::PhantomData<T>);
+
+impl<T> Default for ChainContext<T> {
+	fn default() -> Self {
+		ChainContext(::rstd::marker::PhantomData)
+	}
+}
+
+impl<T: system::Trait> runtime_primitives::traits::Lookup for ChainContext<T> {
+	type Source = DummyAccountId;
+	type Target = AccountId;
+	fn lookup(&self, a: Self::Source) -> rstd::result::Result<Self::Target, &'static str> {
+		// Ok(a)
+		// unimplemented!()
+		Err("unimplemented")
+	}
+}
+
+impl<T: system::Trait> runtime_primitives::traits::CurrentHeight for ChainContext<T> {
+	type BlockNumber = T::BlockNumber;
+	fn current_height(&self) -> Self::BlockNumber {
+		<system::Module<T>>::block_number()
+	}
+}
+
+impl<T: system::Trait> runtime_primitives::traits::BlockNumberToHash for ChainContext<T> {
+	type BlockNumber = T::BlockNumber;
+	type Hash = T::Hash;
+	fn block_number_to_hash(&self, n: Self::BlockNumber) -> Option<Self::Hash> {
+		Some(<system::Module<T>>::block_hash(n))
+	}
+}
+
+// #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug, Hash))]
+// #[derive(Ord, PartialOrd, PartialEq, Eq, Clone, Default, Encode, Decode)]
+// pub struct DummySignature;
+
+// impl runtime_primitives::traits::Verify for DummySignature {
+// 	/// Type of the signer.
+// 	type Signer = AccountId;
+
+// 	/// Verify a signature. Return `true` if signature is valid for the value.
+// 	fn verify<L: runtime_primitives::traits::Lazy<[u8]>>(
+// 		&self,
+// 		_msg: L,
+// 		_signer: &Self::Signer,
+// 	) -> bool {
+// 		false
+// 	}
+// }
+
+/// Alias to Ed25519 pubkey that identifies an account on the chain.
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug, Hash))]
+#[derive(Ord, PartialOrd, PartialEq, Eq, Clone, Default, Encode, Decode)]
+pub struct DummyAccountId;
+
+#[cfg(feature = "std")]
+impl std::fmt::Display for DummyAccountId {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> rstd::fmt::Result {
+		write!(f, "DummyAccountId")
+	}
+}
+
 /// The type used as a helper for interpreting the sender of transactions.
-type Context = balances::ChainContext<Runtime>;
+type Context = ChainContext<Runtime>;
 /// The address format for describing accounts.
-type Address = balances::Address<Runtime>;
+type Address = DummyAccountId;
 /// Block header type as expected by this runtime.
 pub type Header = generic::Header<BlockNumber, BlakeTwo256, Log>;
 /// Block type as expected by this runtime.
@@ -216,7 +263,7 @@ pub type UncheckedExtrinsic = generic::UncheckedMortalExtrinsic<Address, Nonce, 
 /// Extrinsic type that has already been checked.
 pub type CheckedExtrinsic = generic::CheckedExtrinsic<AccountId, Nonce, Call>;
 /// Executive: handles dispatch to the various modules.
-pub type Executive = executive::Executive<Runtime, Block, Context, Balances, AllModules>;
+pub type Executive = executive::Executive<Runtime, Block, Context, (), AllModules>;
 
 // Implement our runtime API endpoints. This is just a bunch of proxying.
 impl_runtime_apis! {
