@@ -177,6 +177,7 @@ impl balances::Trait for Runtime {
 impl sudo::Trait for Runtime {
 	/// The uniquitous event type.
 	type Event = Event;
+	type Proposal = Call;
 }
 
 construct_runtime!(
