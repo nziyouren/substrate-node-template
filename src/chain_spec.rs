@@ -1,5 +1,5 @@
 use template_node_runtime::utxo;
-use primitives::{AuthorityId, ed25519};
+use primitives::{Ed25519AuthorityId, ed25519};
 use template_node_runtime::{
 	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, UpgradeKeyConfig, UtxoConfig
 };
@@ -79,7 +79,7 @@ impl Alternative {
 }
 
 fn testnet_genesis(
-	initial_authorities: Vec<AuthorityId>,
+	initial_authorities: Vec<Ed25519AuthorityId>,
 	// endowed_accounts: Vec<AccountId>,
 	upgrade_key: AccountId,
 ) -> GenesisConfig {
