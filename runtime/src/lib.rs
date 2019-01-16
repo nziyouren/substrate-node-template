@@ -57,6 +57,8 @@ pub use runtime_primitives::{Permill, Perbill};
 pub use timestamp::BlockPeriod;
 pub use srml_support::{StorageValue, RuntimeMetadata};
 
+mod demo;
+
 /// Alias to Ed25519 pubkey that identifies an account on the chain.
 pub type AccountId = primitives::H256;
 
@@ -194,6 +196,8 @@ impl sudo::Trait for Runtime {
 	type Proposal = Call;
 }
 
+impl demo::Trait for Runtime {}
+
 construct_runtime!(
 	pub enum Runtime with Log(InternalLog: DigestItem<Hash, Ed25519AuthorityId>) where
 		Block = Block,
@@ -207,6 +211,7 @@ construct_runtime!(
 		Indices: indices,
 		Balances: balances,
 		Sudo: sudo,
+		Demo: demo::{Module, Call, Storage},
 	}
 );
 
