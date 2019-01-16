@@ -21,18 +21,18 @@ pub type Value = u128;
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 pub struct Transaction {
-	/// Existing UTXOs to be used as inputs for current transaction
+	/// UTXOs to be used as inputs for current transaction
 	pub inputs: Vec<TransactionInput>,
 
 	/// UTXOs to be created as a result of current transaction dispatch
 	pub outputs: Vec<TransactionOutput>,
 }
 
-/// Single transaction input that refers to one existing UTXO
+/// Single transaction input that refers to one UTXO
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 pub struct TransactionInput {
-	/// Reference to an existing UTXO to be spent
+	/// Reference to an UTXO to be spent
 	pub parent_output: H256,
 
 	/// Proof that transaction owner is authorized to spend referred UTXO
@@ -57,6 +57,12 @@ pub struct TransactionOutput {
 	pub salt: u32,
 }
 
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize, Debug))]
+#[derive(Clone, Encode, Decode, Hash)]
+pub enum LockStatus<BlockNumber> {
+	Locked,
+	LockedUntil(BlockNumber),
+}
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
 		/// Dispatch a single transaction and update UTXO set accordingly
@@ -94,11 +100,12 @@ decl_storage! {
 				.collect::<Vec<_>>()
 		}): map H256 => Option<TransactionOutput>;
 
-		/// Total leftover value to be redistributed
-		/// among authorities during block finalization.
-		/// It is accumulated during transaction execution
-		/// and then drained once per block.
+		/// Total leftover value to be redistributed among authorities.
+		/// It is accumulated during block execution and then drained
+		/// on block finalization.
 		LeftoverTotal: Value;
+
+		LockedOutputs: map H256 => Option<LockStatus<T::BlockNumber>>;
 	}
 
 	add_extra_genesis {
@@ -126,15 +133,36 @@ pub enum CheckInfo<'a> {
 pub type CheckResult<'a> = rstd::result::Result<CheckInfo<'a>, &'static str>;
 
 impl<T: Trait> Module<T> {
+	fn lock_utxo(hash: &H256, until: Option<T::BlockNumber>) -> Result {
+		ensure!(!<LockedOutputs<T>>::exists(hash), "utxo is already locked");
+		ensure!(<UnspentOutputs<T>>::exists(hash), "utxo does not exist");
+
+		if let Some(until) = until {
+			ensure!(until > <system::Module<T>>::block_number(), "block number is in the past");
+			<LockedOutputs<T>>::insert(hash, LockStatus::LockedUntil(until));
+		} else {
+			<LockedOutputs<T>>::insert(hash, LockStatus::Locked);
+		}
+
+		Ok(())
+	}
+
+	fn unlock_utxo(hash: &H256) -> Result {
+		ensure!(<LockedOutputs<T>>::exists(hash), "utxo is not locked");
+		<LockedOutputs<T>>::remove(hash);
+		Ok(())
+	}
+
 	/// Check transaction for validity.
 	///
 	/// Ensures that:
 	/// - inputs and outputs are not empty
-	/// - all inputs match to existing and unspent outputs
-	/// - each unspent output is used exactly once
+	/// - all inputs match to existing, unspent and unlocked outputs
+	/// - each input is used exactly once
 	/// - each output is defined exactly once and has nonzero value
 	/// - total output value must not exceed total input value
 	/// - new outputs do not collide with existing ones
+	/// - sum of input and output values does not overflow
 	/// - provided signatures are valid
 	pub fn check_transaction(transaction: &Transaction) -> CheckResult<'_> {
 		ensure!(!transaction.inputs.is_empty(), "no inputs");
@@ -171,7 +199,9 @@ impl<T: Trait> Module<T> {
 		for input in transaction.inputs.iter() {
 			// Fetch UTXO from the storage
 			if let Some(output) = <UnspentOutputs<T>>::get(&input.parent_output) {
-				// Check that we're authorized to use it
+				ensure!(!<LockedOutputs<T>>::exists(&input.parent_output), "utxo is locked");
+
+				// Check that we're authorized to this UTXO
 				ensure!(
 					ed25519_verify(
 						input.signature.as_fixed_bytes(),
@@ -206,7 +236,7 @@ impl<T: Trait> Module<T> {
 		}
 	}
 
-	/// Redistribute combined leftover value of all transactions evenly among authorities
+	/// Redistribute combined leftover value evenly among authorities
 	fn spend_leftover(authorities: &[H256]) {
 		let leftover = <LeftoverTotal<T>>::take();
 		let share_value = leftover / authorities.len() as Value;
