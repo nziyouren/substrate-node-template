@@ -1,6 +1,7 @@
 use primitives::{Ed25519AuthorityId, ed25519};
 use template_node_runtime::{
-	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, BalancesConfig, SudoConfig,
+	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, BalancesConfig,
+	SudoConfig, IndicesConfig
 };
 use substrate_service;
 
@@ -84,6 +85,9 @@ fn testnet_genesis(initial_authorities: Vec<Ed25519AuthorityId>, endowed_account
 		system: None,
 		timestamp: Some(TimestampConfig {
 			period: 5,					// 5 second block time.
+		}),
+		indices: Some(IndicesConfig {
+			ids: endowed_accounts.clone(),
 		}),
 		balances: Some(BalancesConfig {
 			transaction_base_fee: 1,

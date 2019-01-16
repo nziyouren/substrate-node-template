@@ -38,7 +38,7 @@ use primitives::bytes;
 use primitives::{Ed25519AuthorityId, OpaqueMetadata};
 use runtime_primitives::{
 	ApplyResult, transaction_validity::TransactionValidity, Ed25519Signature, generic,
-	traits::{self, BlakeTwo256, Block as BlockT, ProvideInherent},
+	traits::{self, BlakeTwo256, Block as BlockT, ProvideInherent, StaticLookup},
 	BasicInherentData, CheckInherentError
 };
 use client::{block_builder::api as block_builder_api, runtime_api};
@@ -159,12 +159,12 @@ impl indices::Trait for Runtime {
 	/// The type for recording indexing into the account enumeration. If this ever overflows, there
 	/// will be problems!
 	type AccountIndex = u32;
-
 	/// Use the standard means of resolving an index hint from an id.
 	type ResolveHint = indices::SimpleResolveHint<Self::AccountId, Self::AccountIndex>;
-
 	/// Determine whether an account is dead.
 	type IsDeadAccount = Balances;
+	/// The uniquitous event type.
+	type Event = Event;
 }
 
 impl timestamp::Trait for Runtime {
@@ -204,6 +204,7 @@ construct_runtime!(
 		Timestamp: timestamp::{Module, Call, Storage, Config<T>, Inherent},
 		Consensus: consensus::{Module, Call, Storage, Config<T>, Log(AuthoritiesChange), Inherent},
 		Aura: aura::{Module},
+		Indices: indices,
 		Balances: balances,
 		Sudo: sudo,
 	}
