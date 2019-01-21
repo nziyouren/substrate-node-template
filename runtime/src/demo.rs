@@ -1,5 +1,5 @@
 // initialise with:
-// post({sender: runtime.balances.ss58Decode('F7Gh'), call: calls.demo.setPayment(1000)}).tie(console.log)
+// post({sender: runtime.indices.ss58Decode('F7Gh'), call: calls.demo.setPayment(1000)}).tie(console.log)
 
 use parity_codec::Encode;
 use srml_support::{StorageValue, dispatch::Result};
