@@ -81,6 +81,8 @@ construct_service_factory! {
 			{ |config: &mut FactoryFullConfiguration<Self> , client: Arc<FullClient<Self>>|
 				Ok(import_queue(
 					SlotDuration::get_or_compute(&*client)?,
+					client.clone(),
+					None,
 					client,
 					NothingExtra,
 					::consensus::make_basic_inherent as _,
@@ -95,6 +97,8 @@ construct_service_factory! {
 			{ |ref mut config, client: Arc<LightClient<Self>>|
 				Ok(import_queue(
 					SlotDuration::get_or_compute(&*client)?,
+					client.clone(),
+					None,
 					client,
 					NothingExtra,
 					::consensus::make_basic_inherent as _,
