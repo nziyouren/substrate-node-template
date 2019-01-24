@@ -27,8 +27,9 @@ extern crate srml_executive as executive;
 extern crate srml_consensus as consensus;
 extern crate srml_timestamp as timestamp;
 extern crate srml_balances as balances;
-extern crate srml_upgrade_key as upgrade_key;
+extern crate srml_sudo as sudo;
 extern crate srml_aura as aura;
+extern crate srml_indices as indices;
 extern crate substrate_consensus_aura_primitives as consensus_aura;
 
 use rstd::prelude::*;
@@ -37,10 +38,12 @@ use primitives::bytes;
 use primitives::{Ed25519AuthorityId, OpaqueMetadata};
 use runtime_primitives::{
 	ApplyResult, transaction_validity::TransactionValidity, Ed25519Signature, generic,
-	traits::{self, BlakeTwo256, Block as BlockT, ProvideInherent},
-	BasicInherentData, CheckInherentError
+	traits::{self, BlakeTwo256, Block as BlockT, StaticLookup, Extrinsic},
 };
-use client::{block_builder::api as block_builder_api, runtime_api};
+use client::{
+	block_builder::api::{CheckInherentsResult, InherentData, self as block_builder_api},
+	runtime_api
+};
 use version::RuntimeVersion;
 #[cfg(feature = "std")]
 use version::NativeVersion;
@@ -99,8 +102,8 @@ pub mod opaque {
 pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("utxo-node"),
 	impl_name: create_runtime_str!("utxo-node"),
-	authoring_version: 1,
-	spec_version: 1,
+	authoring_version: 3,
+	spec_version: 3,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 };
@@ -117,6 +120,8 @@ pub fn native_version() -> NativeVersion {
 impl system::Trait for Runtime {
 	/// The identifier used to distinguish between accounts.
 	type AccountId = AccountId;
+	/// The lookup mechanism to get account ID from whatever is passed in dispatchers.
+	type Lookup = Indices;
 	/// The index type for storing how many extrinsics an account has signed.
 	type Index = Nonce;
 	/// The index type for blocks.
@@ -142,8 +147,6 @@ impl aura::Trait for Runtime {
 }
 
 impl consensus::Trait for Runtime {
-	/// The position in the block's extrinsics that the note-offline inherent must be placed.
-	const NOTE_OFFLINE_POSITION: u32 = 1;
 	/// The identifier we use to refer to authorities.
 	type SessionKey = Ed25519AuthorityId;
 	// The aura module handles offline-reports internally
@@ -153,34 +156,47 @@ impl consensus::Trait for Runtime {
 	type Log = Log;
 }
 
+impl indices::Trait for Runtime {
+	/// The type for recording indexing into the account enumeration. If this ever overflows, there
+	/// will be problems!
+	type AccountIndex = u32;
+	/// Use the standard means of resolving an index hint from an id.
+	type ResolveHint = indices::SimpleResolveHint<Self::AccountId, Self::AccountIndex>;
+	/// Determine whether an account is dead.
+	type IsDeadAccount = ();
+	/// The uniquitous event type.
+	type Event = Event;
+}
+
 impl timestamp::Trait for Runtime {
-	/// The position in the block's extrinsics that the timestamp-set inherent must be placed.
-	const TIMESTAMP_SET_POSITION: u32 = 0;
 	/// A timestamp: seconds since the unix epoch.
 	type Moment = u64;
 	type OnTimestampSet = Aura;
 }
 
-impl upgrade_key::Trait for Runtime {
+impl utxo::Trait for Runtime {
 	/// The uniquitous event type.
 	type Event = Event;
 }
 
-impl utxo::Trait for Runtime {
+impl sudo::Trait for Runtime {
+	/// The uniquitous event type.
 	type Event = Event;
+	type Proposal = Call;
 }
 
 construct_runtime!(
 	pub enum Runtime with Log(InternalLog: DigestItem<Hash, Ed25519AuthorityId>) where
 		Block = Block,
 		NodeBlock = opaque::Block,
-		InherentData = BasicInherentData
+		UncheckedExtrinsic = UncheckedExtrinsic
 	{
 		System: system::{default, Log(ChangesTrieRoot)},
 		Timestamp: timestamp::{Module, Call, Storage, Config<T>, Inherent},
 		Consensus: consensus::{Module, Call, Storage, Config<T>, Log(AuthoritiesChange), Inherent},
 		Aura: aura::{Module},
-		UpgradeKey: upgrade_key,
+		Indices: indices,
+		Sudo: sudo,
 		Utxo: utxo::{Module, Call, Storage, Config<T>, Event},
 	}
 );
@@ -249,9 +265,9 @@ impl std::fmt::Display for DummyAccountId {
 }
 
 /// The type used as a helper for interpreting the sender of transactions.
-type Context = ChainContext<Runtime>;
+type Context = ChainContext<Runtime>; // system::ChainContext<Runtime>;
 /// The address format for describing accounts.
-type Address = DummyAccountId;
+type Address = DummyAccountId; // <Indices as StaticLookup>::Source;
 /// Block header type as expected by this runtime.
 pub type Header = generic::Header<BlockNumber, BlakeTwo256, Log>;
 /// Block type as expected by this runtime.
@@ -259,7 +275,7 @@ pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 /// BlockId type as expected by this runtime.
 pub type BlockId = generic::BlockId<Block>;
 /// Unchecked extrinsic type as expected by this runtime.
-pub type UncheckedExtrinsic = generic::UncheckedMortalExtrinsic<Address, Nonce, Call, Ed25519Signature>;
+pub type UncheckedExtrinsic = generic::UncheckedMortalCompactExtrinsic<Address, Nonce, Call, Ed25519Signature>;
 /// Extrinsic type that has already been checked.
 pub type CheckedExtrinsic = generic::CheckedExtrinsic<AccountId, Nonce, Call>;
 /// Executive: handles dispatch to the various modules.
@@ -280,8 +296,8 @@ impl_runtime_apis! {
 			Executive::execute_block(block)
 		}
 
-		fn initialise_block(header: <Block as BlockT>::Header) {
-			Executive::initialise_block(&header)
+		fn initialise_block(header: &<Block as BlockT>::Header) {
+			Executive::initialise_block(header)
 		}
 	}
 
@@ -291,7 +307,7 @@ impl_runtime_apis! {
 		}
 	}
 
-	impl block_builder_api::BlockBuilder<Block, BasicInherentData> for Runtime {
+	impl block_builder_api::BlockBuilder<Block> for Runtime {
 		fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> ApplyResult {
 			Executive::apply_extrinsic(extrinsic)
 		}
@@ -300,27 +316,12 @@ impl_runtime_apis! {
 			Executive::finalise_block()
 		}
 
-		fn inherent_extrinsics(data: BasicInherentData) -> Vec<<Block as BlockT>::Extrinsic> {
-			let mut inherent = Vec::new();
-
-			inherent.extend(
-				Timestamp::create_inherent_extrinsics(data.timestamp)
-					.into_iter()
-					.map(|v| (v.0, UncheckedExtrinsic::new_unsigned(Call::Timestamp(v.1))))
-			);
-
-			inherent.extend(
-				Consensus::create_inherent_extrinsics(data.consensus)
-					.into_iter()
-					.map(|v| (v.0, UncheckedExtrinsic::new_unsigned(Call::Consensus(v.1))))
-			);
-
-			inherent.as_mut_slice().sort_unstable_by_key(|v| v.0);
-			inherent.into_iter().map(|v| v.1).collect()
+		fn inherent_extrinsics(data: InherentData) -> Vec<<Block as BlockT>::Extrinsic> {
+			data.create_extrinsics()
 		}
 
-		fn check_inherents(block: Block, data: BasicInherentData) -> Result<(), CheckInherentError> {
-			Runtime::check_inherents(block, data)
+		fn check_inherents(block: Block, data: InherentData) -> CheckInherentsResult {
+			data.check_extrinsics(&block)
 		}
 
 		fn random_seed() -> <Block as BlockT>::Hash {

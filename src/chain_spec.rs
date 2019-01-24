@@ -1,7 +1,7 @@
 use template_node_runtime::utxo;
 use primitives::{Ed25519AuthorityId, ed25519};
 use template_node_runtime::{
-	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, UpgradeKeyConfig, UtxoConfig
+	AccountId, GenesisConfig, ConsensusConfig, TimestampConfig, SudoConfig, IndicesConfig, UtxoConfig
 };
 use substrate_service;
 
@@ -72,17 +72,13 @@ impl Alternative {
 	pub(crate) fn from(s: &str) -> Option<Self> {
 		match s {
 			"dev" => Some(Alternative::Development),
-			"local" => Some(Alternative::LocalTestnet),
+			"" | "local" => Some(Alternative::LocalTestnet),
 			_ => None,
 		}
 	}
 }
 
-fn testnet_genesis(
-	initial_authorities: Vec<Ed25519AuthorityId>,
-	// endowed_accounts: Vec<AccountId>,
-	upgrade_key: AccountId,
-) -> GenesisConfig {
+fn testnet_genesis(initial_authorities: Vec<Ed25519AuthorityId>, /* endowed_accounts: Vec<AccountId>, */ root_key: AccountId) -> GenesisConfig {
 	GenesisConfig {
 		consensus: Some(ConsensusConfig {
 			code: include_bytes!("../runtime/wasm/target/wasm32-unknown-unknown/release/template_node_runtime.compact.wasm").to_vec(),
@@ -92,8 +88,11 @@ fn testnet_genesis(
 		timestamp: Some(TimestampConfig {
 			period: 5,					// 5 second block time.
 		}),
-		upgrade_key: Some(UpgradeKeyConfig {
-			key: upgrade_key,
+		indices: Some(IndicesConfig {
+			ids: endowed_accounts.clone(),
+		}),
+		sudo: Some(SudoConfig {
+			key: root_key,
 		}),
 		utxo: Some(UtxoConfig {
 			initial_utxo: vec![
